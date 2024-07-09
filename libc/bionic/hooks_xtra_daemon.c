@@ -2,35 +2,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "gnss_psds_setting.c"
-
+#define XTRA_DAEMON_PATH1_HOSTNAME "path1.xtracloud.net"
+#define XTRA_DAEMON_PATH2_HOSTNAME "path2.xtracloud.net"
+#define XTRA_DAEMON_PATH3_HOSTNAME "path3.xtracloud.net"
+#define XTRA_DAEMON_PATH4_HOSTNAME "path4.xtracloud.net"
 #define XTRA_DAEMON_HOSTNAME_OVERRIDE "qualcomm.psds.grapheneos.org"
 #define XTRA_DAEMON_DEFAULT_NTP_SERVER "time.grapheneos.org"
 #define XTRA_DAEMON_QUALCOMM_NTP_SERVER "time.xtracloud.net"
 
 static const char* xtra_hook_translate_hostname(const char* hostname) {
-    const int psds_setting = get_gnss_psds_setting();
-
-    if (psds_setting == PSDS_DISABLED) {
-        // intentionally break DNS resolution
-        return NULL;
-    }
-
-    if (strcmp(hostname, XTRA_DAEMON_DEFAULT_NTP_SERVER) == 0) {
-        if (psds_setting == PSDS_SERVER_STANDARD) {
-            return XTRA_DAEMON_QUALCOMM_NTP_SERVER;
-        }
-        return hostname;
-    }
-
-    if (psds_setting == PSDS_SERVER_GRAPHENEOS) {
+    if (strcmp(hostname, XTRA_DAEMON_PATH1_HOSTNAME) == 0 || strcmp(hostname, XTRA_DAEMON_PATH2_HOSTNAME) || strcmp(hostname, XTRA_DAEMON_PATH3_HOSTNAME) || strcmp(hostname, XTRA_DAEMON_PATH4_HOSTNAME))
         return XTRA_DAEMON_HOSTNAME_OVERRIDE;
-    } else if (psds_setting == PSDS_SERVER_STANDARD) {
-        return hostname;
-    } else {
-        // should be unreachable
-        abort();
-    }
+
+    return hostname;
 }
 
 // There are several xtra3*.bin file versions, xtra-daemon gets told by the modem which one to
@@ -46,8 +30,6 @@ static void* xtra_hook_override_ssl_write(const void* orig_buf, int orig_len, in
     if (memmem(obuf, obuf_len, user_agent, strlen(user_agent)) == NULL) {
         return NULL;
     }
-
-    const int psds_setting = get_gnss_psds_setting();
 
     // specify the maximum possible size
     uint8_t* buf = calloc(obuf_len + strlen(XTRA_DAEMON_HOSTNAME_OVERRIDE) + strlen(XTRA_REQUEST_GET_HEADER), 1);
@@ -79,16 +61,14 @@ static void* xtra_hook_override_ssl_write(const void* orig_buf, int orig_len, in
             }
         }
 
-        if (psds_setting == PSDS_SERVER_GRAPHENEOS) {
-            const char host_start[] = "Host:";
-            if (line_len > strlen(host_start)) {
-                if (memcmp(line_start, host_start, strlen(host_start)) == 0) {
-                    const char host_line[] = "Host: " XTRA_DAEMON_HOSTNAME_OVERRIDE "\r\n";
-                    const size_t l = strlen(host_line);
-                    memcpy(buf + buf_off, host_line, l);
-                    buf_off += l;
-                    continue;
-                }
+        const char host_start[] = "Host:";
+        if (line_len > strlen(host_start)) {
+            if (memcmp(line_start, host_start, strlen(host_start)) == 0) {
+                const char host_line[] = "Host: " XTRA_DAEMON_HOSTNAME_OVERRIDE "\r\n";
+                const size_t l = strlen(host_line);
+                memcpy(buf + buf_off, host_line, l);
+                buf_off += l;
+                continue;
             }
         }
 
@@ -124,10 +104,5 @@ static const char* XTRA_EXTRA_TRUSTED_CERTS[] = {
 };
 
 static const char* const* xtra_hook_get_trusted_ssl_certificates() {
-    const int psds_setting = get_gnss_psds_setting();
-    if (psds_setting != PSDS_SERVER_GRAPHENEOS) {
-        return NULL;
-    }
-
     return XTRA_EXTRA_TRUSTED_CERTS;
 }
